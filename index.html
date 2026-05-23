@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>atlas</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2245%22 fill=%22none%22 stroke=%22%234caf50%22 stroke-width=%228%22/%3E%3Cellipse cx=%2250%22 cy=%2250%22 rx=%2220%22 ry=%2245%22 fill=%22none%22 stroke=%22%234caf50%22 stroke-width=%228%22/%3E%3Cline x1=%225%22 y1=%2250%22 x2=%2295%22 y2=%2250%22 stroke=%22%234caf50%22 stroke-width=%228%22/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  </head>
+<body>
+
+  <div id="loading-screen">
+    <i class="fa-solid fa-globe globe"></i>
+  </div>
+
+  <main id="book-container" class="hidden">
+    <div id="book-background"></div>
+    
+    <div class="book-content">
+      <div class="page left-page">
+        <div id="left-page-content" class="fade-content">
+            <div id="start-menu">
+                <h1 class="app-title">atlas.</h1>
+                <p class="app-subtitle">your private travel guide.</p>
+                <div class="menu-controls">
+                  <button id="import-btn" class="circle-btn" title="import"><i class="fa-solid fa-file-import"></i></button>
+                  <button id="export-btn" class="circle-btn" title="export"><i class="fa-solid fa-download"></i></button>
+                  <button id="theme-btn" class="circle-btn" title="toggle theme"><i class="fa-solid fa-moon"></i></button>
+                </div>
+                <input type="file" id="import-file" class="hidden" accept=".json">
+            </div>
+        </div>
+      </div>
+
+      <div class="page right-page">
+        <div id="right-page-content" class="fade-content"></div>
+      </div>
+    </div>
+
+    <div class="bookmarks-container" id="global-bookmarks">
+      <button class="bookmark" id="globe-btn" title="Countries">
+        <i class="fa-solid fa-globe"></i>
+      </button>
+      <button class="bookmark hidden" id="home-btn-global" title="home">
+        <i class="fa-solid fa-house"></i>
+      </button>
+    </div>
+
+    <div class="bookmarks-container hidden" id="main-bookmarks">
+    </div>
+    
+    <div class="bookmarks-container hidden" id="sub-bookmarks">
+    </div>
+
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

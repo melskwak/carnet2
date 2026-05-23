@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Color Wheel</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  .wheel-container {
+    position: relative;
+    width: 380px;
+    height: 380px;
+    margin-bottom: 32px;
+  }
+  canvas { position: absolute; top: 0; left: 0; }
+  .picker-section { width: 380px; }
+  .picker-section label {
+    font-size: 18px;
+    font-weight: 500;
+    color: #111;
+    display: block;
+    margin-bottom: 14px;
+  }
+  .color-input-row { display: flex; align-items: center; gap: 12px; }
+  .color-swatch {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .hex-input {
+    flex: 1;
+    padding: 14px 20px;
+    font-size: 16px;
+    text-align: center;
+    border: 2px solid #a855f7;
+    border-radius: 14px;
+    outline: none;
+    color: #333;
+    letter-spacing: 1px;
+  }
+  .hex-input:focus { border-color: #7c3aed; }
+</style>
+</head>
+<body>
+
+<div class="wheel-container">
+  <canvas id="ringCanvas" width="380" height="380"></canvas>
+  <canvas id="discCanvas" width="380" height="380"></canvas>
+  <canvas id="handleCanvas" width="380" height="380" style="cursor:crosshair"></canvas>
+</div>
+
+<div class="picker-section">
+  <label>1. Pick a color</label>
+  <div class="color-input-row">
+    <div class="color-swatch" id="swatch"></div>
+    <input type="text" class="hex-input" id="hexInput" value="#38a7c7" maxlength="7" spellcheck="false">
+  </div>
+</div>
+
+<script>
+const SIZE = 380, cx = 190, cy = 190;
+const OUTER_R = 184, RING_W = 24, INNER_R = OUTER_R - RING_W;
+const DISC_R = INNER_R - 4;
+
+const rCtx = document.getElementById('ringCanvas').getContext('2d');
+const dCtx = document.getElementById('discCanvas').getContext('2d');
+const hCtx = document.getElementById('handleCanvas').getContext('2d');
+
+// ── colour helpers ────────────────────────────────────────────────────────────
+function hslToRgb(h, s, l) {
+  s /= 100; l /= 100;
+  const k = n => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return [Math.round(f(0)*255), Math.round(f(8)*255), Math.round(f(4)*255)];
+}
+function rgbToHex(r,g,b){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+function hexToRgb(hex){ return [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)); }
+function rgbToHsl(r,g,b){
+  r/=255;g/=255;b/=255;
+  const max=Math.max(r,g,b),min=Math.min(r,g,b);
+  let h=0,s=0,l=(max+min)/2;
+  if(max!==min){
+    const d=max-min;
+    s=l>0.5?d/(2-max-min):d/(max+min);
+    switch(max){
+      case r:h=((g-b)/d+(g<b?6:0))/6;break;
+      case g:h=((b-r)/d+2)/6;break;
+      case b:h=((r-g)/d+4)/6;break;
+    }
+  }
+  return [h*360, s*100, l*100];
+}
+
+// ── draw ring: lightness arc from black (bottom-left) → pure (top) → white (bottom-right) ──
+// We map angle around the ring to lightness 0–100.
+// Convention: top of ring (angle = -π/2) = 50% (pure color)
+//             going clockwise to bottom = 0% (black)
+//             going counter-clockwise to bottom = 100% (white)
+// So: lightness = 50 - (angle_from_top / π) * 50  ... full circle maps -π..π → 100..0
+// Top of ring (angle = -π/2) = 0% lightness (darkest)
+// Bottom of ring (angle = π/2) = 100% lightness (lightest)
+// sin(a) goes from -1 (top) to +1 (bottom), so map that linearly
+function anglToLightness(a) {
+  return (Math.sin(a) + 1) / 2 * 100;
+}
+let ringRight = true; // track which side of the ring the handle is on
+function lightnessToAngl(l) {
+  const s = Math.asin((l / 50) - 1); // right side: [-π/2, π/2]
+  return ringRight ? s : Math.PI - s;
+}
+
+function drawRing(hue, sat) {
+  rCtx.clearRect(0, 0, SIZE, SIZE);
+  const steps = 360;
+  for (let i = 0; i < steps; i++) {
+    const a0 = ((i-0.5)/steps)*Math.PI*2 - Math.PI/2;
+    const a1 = ((i+0.5)/steps)*Math.PI*2 - Math.PI/2;
+    const l = anglToLightness(((i/steps)*Math.PI*2) - Math.PI/2);
+    const [r,g,b] = hslToRgb(hue, sat, l);
+    rCtx.beginPath();
+    rCtx.moveTo(cx, cy);
+    rCtx.arc(cx, cy, OUTER_R, a0, a1);
+    rCtx.closePath();
+    rCtx.fillStyle = `rgb(${r},${g},${b})`;
+    rCtx.fill();
+  }
+  // Punch out centre
+  rCtx.globalCompositeOperation = 'destination-out';
+  rCtx.beginPath();
+  rCtx.arc(cx, cy, INNER_R, 0, Math.PI*2);
+  rCtx.fill();
+  rCtx.globalCompositeOperation = 'source-over';
+  // White borders
+  for (const r of [OUTER_R, INNER_R]) {
+    rCtx.beginPath();
+    rCtx.arc(cx, cy, r, 0, Math.PI*2);
+    rCtx.strokeStyle = 'white';
+    rCtx.lineWidth = 3;
+    rCtx.stroke();
+  }
+}
+
+// ── draw disc: angle=hue, dist=saturation, lightness fixed at 50% ─────────────
+function drawDisc() {
+  const img = dCtx.createImageData(SIZE, SIZE);
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      const dx = x-cx, dy = y-cy;
+      const dist = Math.sqrt(dx*dx+dy*dy);
+      if (dist > DISC_R) continue;
+      const hue = ((Math.atan2(dy,dx)*180/Math.PI)+360)%360;
+      const sat = (dist/DISC_R)*100;
+      const [r,g,b] = hslToRgb(hue, sat, 50);
+      const i=(y*SIZE+x)*4;
+      img.data[i]=r;img.data[i+1]=g;img.data[i+2]=b;img.data[i+3]=255;
+    }
+  }
+  dCtx.putImageData(img, 0, 0);
+}
+
+// ── draw handles ──────────────────────────────────────────────────────────────
+function drawHandles(hue, sat, lightness) {
+  hCtx.clearRect(0, 0, SIZE, SIZE);
+
+  // Disc handle
+  const dAngle = hue * Math.PI / 180;
+  const dDist = (sat/100) * DISC_R;
+  const dx = cx + Math.cos(dAngle)*dDist;
+  const dy = cy + Math.sin(dAngle)*dDist;
+
+  // Ring handle
+  const rAngle = lightnessToAngl(lightness);
+  const ringMid = (INNER_R + OUTER_R) / 2;
+  const rx = cx + Math.cos(rAngle)*ringMid;
+  const ry = cy + Math.sin(rAngle)*ringMid;
+
+  // Ring handle (hollow)
+  hCtx.beginPath();
+  hCtx.arc(rx, ry, 11, 0, Math.PI*2);
+  hCtx.strokeStyle = 'white';
+  hCtx.lineWidth = 3;
+  hCtx.stroke();
+  hCtx.beginPath();
+  hCtx.arc(rx, ry, 8, 0, Math.PI*2);
+  hCtx.strokeStyle = 'rgba(0,0,0,0.25)';
+  hCtx.lineWidth = 1.5;
+  hCtx.stroke();
+
+  // Disc handle (filled white)
+  hCtx.beginPath();
+  hCtx.arc(dx, dy, 11, 0, Math.PI*2);
+  hCtx.fillStyle = 'white';
+  hCtx.fill();
+  hCtx.beginPath();
+  hCtx.arc(dx, dy, 11, 0, Math.PI*2);
+  hCtx.strokeStyle = 'rgba(0,0,0,0.2)';
+  hCtx.lineWidth = 1.5;
+  hCtx.stroke();
+}
+
+// ── state ─────────────────────────────────────────────────────────────────────
+let hue = 190, sat = 60, lightness = 50;
+
+function refresh(redrawRing = true) {
+  if (redrawRing) drawRing(hue, sat);
+  drawHandles(hue, sat, lightness);
+  const [r,g,b] = hslToRgb(hue, sat, lightness);
+  const hex = rgbToHex(r,g,b);
+  document.getElementById('swatch').style.background = hex;
+  document.getElementById('hexInput').value = hex;
+}
+
+// ── interaction ───────────────────────────────────────────────────────────────
+let dragging = null;
+
+function getPos(e) {
+  const rect = document.getElementById('handleCanvas').getBoundingClientRect();
+  const src = e.touches ? e.touches[0] : e;
+  return [src.clientX-rect.left, src.clientY-rect.top];
+}
+
+function pickDisc(x, y) {
+  const dx=x-cx, dy=y-cy, dist=Math.sqrt(dx*dx+dy*dy);
+  hue = ((Math.atan2(dy,dx)*180/Math.PI)+360)%360;
+  sat = Math.min(dist/DISC_R,1)*100;
+}
+
+function pickRing(x, y) {
+  const dx=x-cx, dy=y-cy;
+  const a = Math.atan2(dy,dx);
+  ringRight = dx >= 0; // track which semicircle the handle is on
+  lightness = Math.max(0, Math.min(100, anglToLightness(a)));
+}
+
+function onDown(e) {
+  e.preventDefault();
+  const [x,y] = getPos(e);
+  const dist = Math.sqrt((x-cx)**2+(y-cy)**2);
+  if (dist<=DISC_R) { dragging='disc'; pickDisc(x,y); refresh(true); }
+  else if (dist<=OUTER_R) { dragging='ring'; pickRing(x,y); refresh(false); }
+}
+
+function onMove(e) {
+  if (!dragging) return;
+  e.preventDefault();
+  const [x,y] = getPos(e);
+  if (dragging==='disc') { pickDisc(x,y); refresh(true); }
+  else { pickRing(x,y); refresh(false); }
+}
+
+const hCanvas = document.getElementById('handleCanvas');
+hCanvas.addEventListener('mousedown', onDown);
+window.addEventListener('mousemove', onMove);
+window.addEventListener('mouseup', () => dragging=null);
+hCanvas.addEventListener('touchstart', onDown, {passive:false});
+window.addEventListener('touchmove', onMove, {passive:false});
+window.addEventListener('touchend', () => dragging=null);
+
+document.getElementById('hexInput').addEventListener('input', e => {
+  const v = e.target.value;
+  if (!/^#[0-9a-fA-F]{6}$/.test(v)) return;
+  const [r,g,b] = hexToRgb(v);
+  [hue,sat,lightness] = rgbToHsl(r,g,b);
+  refresh(true);
+  document.getElementById('swatch').style.background = v;
+});
+
+// ── init ──────────────────────────────────────────────────────────────────────
+drawDisc();
+refresh(true);
+</script>
+</body>
+</html>
